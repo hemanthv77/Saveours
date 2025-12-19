@@ -4,12 +4,15 @@ import { View, Text, Button, StyleSheet } from 'react-native';
 const HomeScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Home Screen</Text>
-      <Text style={styles.subtitle}>Food Sharing App</Text>
-      <Button
-        title="Go to Login"
-        onPress={() => navigation.navigate('Login')}
-      />
+      <Text style={styles.title}>Welcome to Saveours</Text>
+      <Text style={styles.subtitle}>Share food, reduce waste</Text>
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Get Started"
+          onPress={() => navigation.navigate('Login')}
+          color="#FF6B4A"
+        />
+      </View>
     </View>
   );
 };

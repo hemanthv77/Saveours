@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import { useDispatch } from 'react-redux';
+import firestore from '@react-native-firebase/firestore';
 import { signUp } from '../services/firebase';
+import { setUser } from '../redux/authSlice';
 
 const SignUpScreen = ({ navigation }) => {
+  const dispatch = useDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -14,9 +18,39 @@ const SignUpScreen = ({ navigation }) => {
     }
 
     try {
-      await signUp(email, password);
+      const user = await signUp(email, password);
+      
+      // Create user document in Firestore
+      const userData = {
+        userId: user.uid,
+        email: user.email,
+        name: '', // To be filled in My Account
+        dateOfBirth: null,
+        phoneNumber: '',
+        profilePictureUrl: '',
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+        communities: [], // Array of community IDs user is part of
+        adminCommunities: [] // Array of community IDs user manages
+      };
+
+      await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .set(userData);
+
+      // Update Redux store with user data
+      dispatch(setUser({
+        uid: user.uid,
+        email: user.email,
+        ...userData
+      }));
+
       Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('Login');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Communities' }],
+      });
     } catch (error) {
       Alert.alert('Error', error.message);
     }
