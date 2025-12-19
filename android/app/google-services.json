@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "179996970014",
+    "project_id": "saveours-d64cc",
+    "storage_bucket": "saveours-d64cc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:179996970014:android:b38b9820c0c5079cc5720f",
+        "android_client_info": {
+          "package_name": "com.saveours"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdULLjJQSUtdpqssWZKuE4tjsz1jA8d_4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
