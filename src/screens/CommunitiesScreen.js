@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,10 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Switch,
+  Animated,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -80,6 +83,21 @@ const CommunitiesScreen = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [formErrors, setFormErrors] = useState({});
 
+  // Community type + screening questions
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [showPrivateOptions, setShowPrivateOptions] = useState(false);
+  const [screeningQuestions, setScreeningQuestions] = useState([]);
+  const privateAnim = useRef(new Animated.Value(0)).current;
+
+  // Community radius (km)
+  const [radiusKm, setRadiusKm] = useState(10);
+
+  const screeningQuestionsValid = useMemo(() => {
+    if (!isPrivate) return true;
+    if (!screeningQuestions.length) return true;
+    return screeningQuestions.every((q) => (q.question || '').trim().length >= 10);
+  }, [isPrivate, screeningQuestions]);
+
   // ============================================================
   // FIRESTORE LISTENER - Real-time updates
   // ============================================================
@@ -134,8 +152,15 @@ const CommunitiesScreen = () => {
 
   // Navigate to community details
   const handleCommunityPress = useCallback(
-    (communityId) => {
-      navigation.navigate('CommunityDetail', { communityId });
+    (community) => {
+      const communityId = community?.id;
+      if (!communityId) return;
+
+      const uid = auth().currentUser?.uid;
+      const memberIds = Array.isArray(community?.memberIds) ? community.memberIds : [];
+      const isMember = !!uid && memberIds.includes(uid);
+
+      navigation.navigate(isMember ? 'CommunityFeed' : 'CommunityDetail', { communityId });
     },
     [navigation]
   );
@@ -208,6 +233,11 @@ const CommunitiesScreen = () => {
     });
     setSelectedImage(null);
     setFormErrors({});
+    setIsPrivate(false);
+    setScreeningQuestions([]);
+    setShowPrivateOptions(false);
+    privateAnim.setValue(0);
+    setRadiusKm(10);
   };
 
   // Update form field
@@ -219,6 +249,72 @@ const CommunitiesScreen = () => {
     }
   };
 
+  const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  const setCommunityPrivate = (nextValue) => {
+    if (nextValue) {
+      setIsPrivate(true);
+      setShowPrivateOptions(true);
+      Animated.timing(privateAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    Animated.timing(privateAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setShowPrivateOptions(false);
+        setScreeningQuestions([]);
+        setFormErrors((prev) => {
+          const next = { ...prev };
+          delete next.screeningQuestions;
+          Object.keys(next)
+            .filter((k) => k.startsWith('sq_'))
+            .forEach((k) => delete next[k]);
+          return next;
+        });
+      }
+    });
+    setIsPrivate(false);
+  };
+
+  const addScreeningQuestion = () => {
+    if (screeningQuestions.length >= 5) {
+      Alert.alert('Limit reached', 'You can add up to 5 screening questions.');
+      return;
+    }
+    setScreeningQuestions((prev) => [...prev, { id: makeId(), question: '' }]);
+  };
+
+  const updateScreeningQuestion = (id, text) => {
+    setScreeningQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, question: text } : q))
+    );
+    const key = `sq_${id}`;
+    if (formErrors[key] || formErrors.screeningQuestions) {
+      setFormErrors((prev) => ({ ...prev, [key]: null, screeningQuestions: null }));
+    }
+  };
+
+  const removeScreeningQuestion = (id) => {
+    setScreeningQuestions((prev) => prev.filter((q) => q.id !== id));
+    const key = `sq_${id}`;
+    if (formErrors[key] || formErrors.screeningQuestions) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        delete next.screeningQuestions;
+        return next;
+      });
+    }
+  };
+
   // Image picker handler
   const handleSelectImage = async () => {
     const options = {
@@ -226,14 +322,29 @@ const CommunitiesScreen = () => {
       maxWidth: 1024,
       maxHeight: 1024,
       quality: 0.8,
+      selectionLimit: 1,
+      includeBase64: true,
     };
 
     try {
       const result = await launchImageLibrary(options);
-      if (result.assets && result.assets[0]) {
-        setSelectedImage(result.assets[0]);
+      if (result?.didCancel) return;
+      if (result?.errorCode) {
+        console.error('Image picker error:', result.errorCode, result.errorMessage);
+        Alert.alert('Error', result.errorMessage || 'Failed to select image.');
+        return;
       }
+
+      const asset = result?.assets?.[0];
+      if (!asset) return;
+      if (!asset.uri && !asset.base64) {
+        Alert.alert('Error', 'Selected image is unavailable. Please choose a different photo.');
+        return;
+      }
+
+      setSelectedImage(asset);
     } catch (error) {
+      console.error('Image picker exception:', error);
       Alert.alert('Error', 'Failed to select image.');
     }
   };
@@ -277,6 +388,24 @@ const CommunitiesScreen = () => {
       errors.description = 'Description cannot exceed 500 characters';
     }
 
+    // Screening questions validation (only when private and user added questions)
+    if (isPrivate && screeningQuestions.length > 0) {
+      let hasQuestionError = false;
+      screeningQuestions.forEach((q) => {
+        const trimmed = (q.question || '').trim();
+        if (!trimmed) {
+          errors[`sq_${q.id}`] = 'Question cannot be empty';
+          hasQuestionError = true;
+        } else if (trimmed.length < 10) {
+          errors[`sq_${q.id}`] = 'Question must be at least 10 characters';
+          hasQuestionError = true;
+        }
+      });
+      if (hasQuestionError) {
+        errors.screeningQuestions = 'Please fix your screening questions.';
+      }
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -288,7 +417,8 @@ const CommunitiesScreen = () => {
       formData.location.trim().length >= 3 &&
       parseInt(formData.maxCapacity, 10) >= 10 &&
       parseInt(formData.maxCapacity, 10) <= 1000 &&
-      formData.description.trim().length >= 20
+      formData.description.trim().length >= 20 &&
+      screeningQuestionsValid
     );
   };
 
@@ -312,11 +442,23 @@ const CommunitiesScreen = () => {
 
       // Upload image if selected
       if (selectedImage) {
-        const imageRef = storage().ref(
-          `communities/${Date.now()}_${selectedImage.fileName || 'image.jpg'}`
-        );
-        await imageRef.putFile(selectedImage.uri);
-        imageUrl = await imageRef.getDownloadURL();
+        const safeName = (selectedImage.fileName || 'image.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const imageRef = storage().ref(`communities/${Date.now()}_${safeName}`);
+
+        if (selectedImage.base64) {
+          await imageRef.putString(selectedImage.base64, 'base64', {
+            contentType: selectedImage.type || 'image/jpeg',
+          });
+          imageUrl = await imageRef.getDownloadURL();
+        } else if (selectedImage.uri) {
+          const uploadUri =
+            Platform.OS === 'ios' && selectedImage.uri.startsWith('file://')
+              ? selectedImage.uri.replace('file://', '')
+              : selectedImage.uri;
+
+          await imageRef.putFile(uploadUri);
+          imageUrl = await imageRef.getDownloadURL();
+        }
       }
 
       // Create community document
@@ -327,24 +469,22 @@ const CommunitiesScreen = () => {
         currentMembers: 1,
         description: formData.description.trim(),
         imageUrl,
+        createdBy: currentUser.uid,
         adminIds: [currentUser.uid],
         memberIds: [currentUser.uid],
         createdAt: firestore.FieldValue.serverTimestamp(),
-        isPrivate: false,
+        isPrivate: !!isPrivate,
+        radiusKm: typeof radiusKm === 'number' ? radiusKm : 0,
+        screeningQuestions: isPrivate
+          ? screeningQuestions
+              .map((q) => ({ questionId: q.id, question: (q.question || '').trim() }))
+              .filter((q) => q.question.length > 0)
+          : [],
       };
 
       const docRef = await firestore()
         .collection('communities')
         .add(communityData);
-
-      // Add to Redux store
-      dispatch(
-        addCommunity({
-          id: docRef.id,
-          ...communityData,
-          createdAt: new Date().toISOString(),
-        })
-      );
 
       Alert.alert('Success', 'Community created successfully!');
       handleCloseModal();
@@ -372,10 +512,7 @@ const CommunitiesScreen = () => {
 
   // Render community card
   const renderCommunityCard = ({ item }) => (
-    <CommunityCard
-      community={item}
-      onPress={() => handleCommunityPress(item.id)}
-    />
+    <CommunityCard community={item} onPress={() => handleCommunityPress(item)} />
   );
 
   // Empty list component
@@ -488,7 +625,6 @@ const CommunitiesScreen = () => {
           data={filteredCommunities}
           renderItem={renderCommunityCard}
           keyExtractor={(item) => item.id}
-          numColumns={2}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={renderEmptyList}
@@ -628,6 +764,130 @@ const CommunitiesScreen = () => {
                   {formErrors.description && (
                     <Text style={styles.errorText}>{formErrors.description}</Text>
                   )}
+                </View>
+
+                {/* Community Type Toggle */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Community Type</Text>
+                  <Text style={styles.helpText}>
+                    Choose who can join this community
+                  </Text>
+
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLeft}>
+                      <Text style={styles.toggleIcon}>{isPrivate ? '🔒' : '🌍'}</Text>
+                      <View style={styles.toggleTextWrap}>
+                        <Text style={styles.toggleTitle}>
+                          {isPrivate ? 'Private Community' : 'Public Community'}
+                        </Text>
+                        <Text style={styles.toggleSubtext}>
+                          {isPrivate
+                            ? 'Admins must approve new members'
+                            : 'Anyone within radius can join instantly'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Switch
+                      trackColor={{ false: COLORS.border, true: COLORS.primary }}
+                      thumbColor={COLORS.white}
+                      value={isPrivate}
+                      onValueChange={setCommunityPrivate}
+                    />
+                  </View>
+
+                  {/* Screening Questions (Optional) */}
+                  {showPrivateOptions && (
+                    <Animated.View
+                      style={[
+                        styles.privateSection,
+                        {
+                          opacity: privateAnim,
+                          transform: [
+                            {
+                              translateY: privateAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [10, 0],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                      <Text style={styles.privateTitle}>Screening Questions (Optional)</Text>
+                      <Text style={styles.privateHelp}>Ask questions to screen new members</Text>
+
+                      <TouchableOpacity
+                        style={styles.addQuestionButton}
+                        onPress={addScreeningQuestion}
+                        accessibilityLabel="Add screening question"
+                      >
+                        <Text style={styles.addQuestionButtonText}>Add Question</Text>
+                      </TouchableOpacity>
+
+                      {formErrors.screeningQuestions ? (
+                        <Text style={styles.errorText}>{formErrors.screeningQuestions}</Text>
+                      ) : null}
+
+                      {screeningQuestions.map((q) => (
+                        <View key={q.id} style={styles.questionRow}>
+                          <TextInput
+                            style={[
+                              styles.questionInput,
+                              formErrors[`sq_${q.id}`] && styles.inputError,
+                            ]}
+                            placeholder="e.g., Why do you want to join?"
+                            placeholderTextColor={COLORS.textMuted}
+                            value={q.question}
+                            onChangeText={(text) => updateScreeningQuestion(q.id, text)}
+                            maxLength={120}
+                          />
+                          <TouchableOpacity
+                            style={styles.removeQuestionButton}
+                            onPress={() => removeScreeningQuestion(q.id)}
+                            accessibilityLabel="Remove question"
+                          >
+                            <Text style={styles.removeQuestionText}>✕</Text>
+                          </TouchableOpacity>
+                          {formErrors[`sq_${q.id}`] ? (
+                            <Text style={styles.questionErrorText}>{formErrors[`sq_${q.id}`]}</Text>
+                          ) : null}
+                        </View>
+                      ))}
+                    </Animated.View>
+                  )}
+                </View>
+
+                {/* Community Radius */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Community Radius</Text>
+                  <Text style={styles.helpText}>
+                    Set how far (in km) this community covers
+                  </Text>
+
+                  <View style={styles.radiusHeaderRow}>
+                    <Text style={styles.radiusValue}>{Math.round(radiusKm)} km</Text>
+                    <Text style={styles.radiusRange}>0–100 km</Text>
+                  </View>
+
+                  <Slider
+                    value={radiusKm}
+                    onValueChange={setRadiusKm}
+                    minimumValue={0}
+                    maximumValue={100}
+                    step={1}
+                    minimumTrackTintColor={COLORS.primary}
+                    maximumTrackTintColor={COLORS.border}
+                    thumbTintColor={COLORS.primary}
+                  />
+
+                  <View style={styles.radiusTicksRow}>
+                    {Array.from({ length: 11 }, (_, i) => i * 10).map((v) => (
+                      <View key={v} style={styles.radiusTickWrap}>
+                        <View style={styles.radiusTick} />
+                        <Text style={styles.radiusTickLabel}>{v}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
 
                 {/* Upload Image */}
@@ -968,6 +1228,147 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'right',
     marginTop: 4,
+  },
+  helpText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 6,
+  },
+  toggleRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+  },
+  toggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 10,
+  },
+  toggleIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  toggleSubtext: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  radiusHeaderRow: {
+    marginTop: 12,
+    marginBottom: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  radiusValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  radiusRange: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  radiusTicksRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  radiusTickWrap: {
+    alignItems: 'center',
+    width: 18,
+  },
+  radiusTick: {
+    width: 2,
+    height: 8,
+    backgroundColor: COLORS.border,
+    borderRadius: 1,
+  },
+  radiusTickLabel: {
+    marginTop: 4,
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  privateSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  privateTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 6,
+  },
+  privateHelp: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+  },
+  addQuestionButton: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  addQuestionButtonText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  questionRow: {
+    marginBottom: 12,
+  },
+  questionInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingRight: 44,
+    fontSize: 14,
+    color: COLORS.text,
+    backgroundColor: COLORS.white,
+  },
+  removeQuestionButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  removeQuestionText: {
+    fontSize: 16,
+    color: COLORS.textLight,
+    fontWeight: 'bold',
+  },
+  questionErrorText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: 6,
   },
   errorText: {
     fontSize: 12,

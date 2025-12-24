@@ -86,6 +86,16 @@ You've successfully run and modified your React Native App. :partying_face:
 
 If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
 
+## Firestore indexes (join requests)
+
+If you use the private community join-request flow, Firestore will prompt you to create composite indexes the first time a query requires them.
+
+Create these composite indexes for the `joinRequests` collection:
+
+- `communityId` + `status` (admins query pending requests)
+- `userId` + `communityId` (check if a user already requested for a community)
+- `userId` + `status` (user views their pending requests)
+
 # Learn More
 
 To learn more about React Native, take a look at the following resources:

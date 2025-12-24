@@ -150,8 +150,15 @@ const MyCommunitiesScreen = () => {
   // ============================================================
   // HANDLERS
   // ============================================================
-  const handleCommunityPress = (communityId) => {
-    navigation.navigate('CommunityDetail', { communityId });
+  const handleCommunityPress = (community) => {
+    const communityId = community?.id;
+    if (!communityId) return;
+
+    const uid = auth().currentUser?.uid;
+    const memberIds = Array.isArray(community?.memberIds) ? community.memberIds : [];
+    const isMember = !!uid && memberIds.includes(uid);
+
+    navigation.navigate(isMember ? 'CommunityFeed' : 'CommunityDetail', { communityId });
   };
 
   const handleCreateCommunity = () => {
@@ -174,7 +181,7 @@ const MyCommunitiesScreen = () => {
       )}
       <CommunityCard
         community={community}
-        onPress={() => handleCommunityPress(community.id)}
+        onPress={() => handleCommunityPress(community)}
       />
     </View>
   );

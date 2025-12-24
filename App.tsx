@@ -18,6 +18,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import CommunitiesScreen from './src/screens/CommunitiesScreen';
+import CommunityDetailScreen from './src/screens/CommunityDetailScreen';
+import CommunityFeedScreen from './src/screens/CommunityFeedScreen';
 import MyCommunitiesScreen from './src/screens/MyCommunitiesScreen';
 import MyAccountScreen from './src/screens/MyAccountScreen';
 
@@ -52,8 +54,13 @@ function App() {
             />
             <Stack.Screen 
               name="CommunityDetail" 
-              component={CommunitiesScreen}
+              component={CommunityDetailScreen}
               options={{ title: 'Community Details' }}
+            />
+            <Stack.Screen
+              name="CommunityFeed"
+              component={CommunityFeedScreen}
+              options={{ title: 'Community Feed' }}
             />
             <Stack.Screen 
               name="MyCommunities" 

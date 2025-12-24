@@ -16,6 +16,18 @@ const communitiesSlice = createSlice({
       state.error = null;
     },
     addCommunity: (state, action) => {
+      const id = action.payload?.id;
+      if (!id) {
+        state.communities.unshift(action.payload);
+        return;
+      }
+
+      const existingIndex = state.communities.findIndex((c) => c.id === id);
+      if (existingIndex !== -1) {
+        state.communities[existingIndex] = action.payload;
+        return;
+      }
+
       state.communities.unshift(action.payload);
     },
     updateCommunity: (state, action) => {
