@@ -8,9 +8,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   ScrollView,
-  Platform 
+  Platform,
+  ImageBackground,
 } from 'react-native';
 import { signIn } from '../services/firebase';
+
+const loginBackgroundImage = require('../../assets/login-bg.png');
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -30,62 +33,77 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <ImageBackground
+      source={loginBackgroundImage}
+      style={styles.background}
+      resizeMode="cover"
     >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <View style={styles.backgroundOverlay} />
+
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Text style={styles.title}>Login</Text>
-        
-        <View style={styles.formContainer}>
-          <Text style={styles.label}>Email Address</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
-          
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your password"
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="password"
-          />
-          
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Login</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.signUpButton}
-            onPress={() => navigation.navigate('SignUp')}
-          >
-            <Text style={styles.signUpButtonText}>
-              Don't have an account? Sign Up
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>Login</Text>
+
+          <View style={styles.formContainer}>
+            <Text style={styles.label}>Email Address</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor="#999"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+            />
+
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              placeholderTextColor="#999"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="password"
+            />
+
+            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+              <Text style={styles.loginButtonText}>Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.signUpButton}
+              onPress={() => navigation.navigate('SignUp')}
+            >
+              <Text style={styles.signUpButtonText}>
+                Don't have an account? Sign Up
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+  },
+  backgroundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     flexGrow: 1,
@@ -97,10 +115,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 40,
     textAlign: 'center',
-    color: '#1A1A1A',
+    color: '#FFFFFF',
   },
   formContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',

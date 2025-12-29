@@ -1,0 +1,8 @@
+Place the login background image here.
+
+Expected filename: login-bg.png
+Expected path: assets/login-bg.png
+
+Note: make sure Windows didn't save it as `login-bg.png.png` (double extension).
+
+(You can also use .jpg, but update the require() in src/screens/LoginScreen.js accordingly.)

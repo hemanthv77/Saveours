@@ -14,7 +14,6 @@ import { StatusBar } from 'react-native';
 import store from './src/redux/store';
 
 // Screens
-import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import CommunitiesScreen from './src/screens/CommunitiesScreen';
@@ -31,14 +30,9 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" />
         <NavigationContainer>
-          <Stack.Navigator initialRouteName="Home">
-            <Stack.Screen 
-              name="Home" 
-              component={HomeScreen}
-              options={{ title: 'Saveours - Food Sharing' }}
-            />
-            <Stack.Screen 
-              name="Login" 
+          <Stack.Navigator initialRouteName="Login">
+            <Stack.Screen
+              name="Login"
               component={LoginScreen}
               options={{ title: 'Login' }}
             />

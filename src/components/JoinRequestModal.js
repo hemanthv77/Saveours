@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -62,10 +63,10 @@ const JoinRequestModal = ({
 
     for (const q of questions) {
       const val = (answersById[q.questionId] || '').trim();
-      if (val.length < 10) {
+      if (!val) {
         return {
           ok: false,
-          message: 'Please fill all answers (min 10 characters each).',
+          message: 'Please fill in all answers.',
         };
       }
     }
@@ -77,9 +78,7 @@ const JoinRequestModal = ({
 
     const v = validate();
     if (!v.ok) {
-      // Keep it simple: show inline message via alert-like text
-      // Caller can also show Alert; but spec wants modal UX and success message handled by screen.
-      // We'll just block submission here.
+      Alert.alert('Validation Error', v.message || 'Please check your answers.');
       return;
     }
 
@@ -175,10 +174,6 @@ const JoinRequestModal = ({
               )}
             </TouchableOpacity>
           </View>
-
-          {questions.length ? (
-            <Text style={styles.hintText}>All answers must be at least 10 characters.</Text>
-          ) : null}
         </View>
       </View>
     </Modal>

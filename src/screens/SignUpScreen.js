@@ -7,11 +7,34 @@ import { setUser } from '../redux/authSlice';
 
 const SignUpScreen = ({ navigation }) => {
   const dispatch = useDispatch();
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleSignUp = async () => {
+    // Validate required fields
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
+    if (!phoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
+
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
+
+    if (!password) {
+      Alert.alert('Error', 'Please enter a password');
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
@@ -24,9 +47,9 @@ const SignUpScreen = ({ navigation }) => {
       const userData = {
         userId: user.uid,
         email: user.email,
-        name: '', // To be filled in My Account
+        name: name.trim(),
         dateOfBirth: null,
-        phoneNumber: '',
+        phoneNumber: phoneNumber.trim(),
         profilePictureUrl: '',
         createdAt: firestore.FieldValue.serverTimestamp(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
@@ -61,7 +84,21 @@ const SignUpScreen = ({ navigation }) => {
       <Text style={styles.title}>Sign Up</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Full Name *"
+        value={name}
+        onChangeText={setName}
+        autoCapitalize="words"
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Phone Number *"
+        value={phoneNumber}
+        onChangeText={setPhoneNumber}
+        keyboardType="phone-pad"
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Email *"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -69,14 +106,14 @@ const SignUpScreen = ({ navigation }) => {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="Password *"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
       <TextInput
         style={styles.input}
-        placeholder="Confirm Password"
+        placeholder="Confirm Password *"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
