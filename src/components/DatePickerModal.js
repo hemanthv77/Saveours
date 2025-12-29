@@ -93,8 +93,14 @@ const DatePickerModal = ({ visible, onClose, onDateSelect, initialDate = new Dat
             <Text style={styles.headerTitle}>Select Date of Birth</Text>
           </View>
 
-          {/* Month and Year Selectors */}
-          <View style={styles.selectorsContainer}>
+          {/* Scrollable Content */}
+          <ScrollView 
+            style={styles.scrollableContent}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {/* Month and Year Selectors */}
+            <View style={styles.selectorsContainer}>
             {/* Month Selector */}
             <View style={styles.selectorColumn}>
               <Text style={styles.selectorLabel}>Month</Text>
@@ -195,6 +201,7 @@ const DatePickerModal = ({ visible, onClose, onDateSelect, initialDate = new Dat
               ))}
             </View>
           </View>
+          </ScrollView>
 
           {/* Action Buttons */}
           <View style={styles.buttonContainer}>
@@ -228,8 +235,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderRadius: 16,
     width: width * 0.9,
-    maxHeight: '80%',
-    overflow: 'hidden',
+    maxHeight: '85%',
   },
   header: {
     padding: 20,
@@ -241,6 +247,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
     textAlign: 'center',
+  },
+  scrollableContent: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   selectorsContainer: {
     flexDirection: 'row',

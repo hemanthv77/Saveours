@@ -300,7 +300,7 @@ const CommunityDetailScreen = () => {
           )
         : undefined,
     });
-  }, [communityId, editMode, editWorking, isAdmin, navigation]);
+  }, [communityId, editMode, editWorking, isAdmin, navigation, pendingJoinRequests.length]);
 
   // Fetch pending join requests for admins
   useEffect(() => {
@@ -1639,18 +1639,20 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   notificationBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#FFFFFF',
   },

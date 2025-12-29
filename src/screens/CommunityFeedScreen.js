@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Linking,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,9 +14,11 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import KitchenCard from '../components/KitchenCard';
 
 const COLORS = {
   primary: '#FF6B4A',
+  primaryLight: '#FFF0ED',
   background: '#F5F5F5',
   white: '#FFFFFF',
   text: '#1A1A1A',
@@ -22,23 +26,40 @@ const COLORS = {
   textMuted: '#888888',
   border: '#E0E0E0',
   error: '#FF3B30',
+  warning: '#FF9500',
+  success: '#34C759',
 };
 
 const CommunityFeedScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { communityId } = route.params || {};
+  const { communityId, communityName } = route.params || {};
 
   const currentUserId = auth().currentUser?.uid || null;
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [working, setWorking] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [community, setCommunity] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
+  const [posts, setPosts] = useState([]);
+  const [postsError, setPostsError] = useState(null);
 
+  // Header setup with profile menu
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: communityName || 'Community Feed',
+      headerTitleAlign: 'center',
+      headerShadowVisible: true,
+      headerStyle: {
+        backgroundColor: COLORS.white,
+      },
+      headerTitleStyle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text,
+      },
       headerRight: () => (
         <TouchableOpacity
           onPress={() => setMenuVisible((v) => !v)}
@@ -49,8 +70,9 @@ const CommunityFeedScreen = () => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, communityName]);
 
+  // Listen for community data
   useEffect(() => {
     if (!communityId) {
       setCommunity(null);
@@ -82,11 +104,43 @@ const CommunityFeedScreen = () => {
     return unsubscribe;
   }, [communityId]);
 
+  // Listen for posts in this community (real-time)
   useEffect(() => {
-    navigation.setOptions({
-      title: community?.name ? community.name : 'Community Feed',
-    });
-  }, [navigation, community?.name]);
+    if (!communityId) {
+      setPosts([]);
+      return;
+    }
+
+    setPostsError(null);
+    
+    const unsubscribe = firestore()
+      .collection('posts')
+      .where('communityId', '==', communityId)
+      .where('status', '==', 'active')
+      .onSnapshot(
+        (snapshot) => {
+          const postsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          // Sort by createdAt descending (newest first)
+          postsData.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || 0;
+            const bTime = b.createdAt?.toMillis?.() || 0;
+            return bTime - aTime;
+          });
+          setPosts(postsData);
+          setRefreshing(false);
+        },
+        (error) => {
+          console.error('Posts listener error:', error);
+          setPostsError('Failed to load posts. Pull to refresh.');
+          setRefreshing(false);
+        }
+      );
+
+    return unsubscribe;
+  }, [communityId]);
 
   const adminIds = useMemo(() => {
     const ids = Array.isArray(community?.adminIds) ? community.adminIds : [];
@@ -109,6 +163,11 @@ const CommunityFeedScreen = () => {
     if (!currentUserId) return false;
     return memberIds.includes(currentUserId);
   }, [memberIds, currentUserId]);
+
+  const isFounder = useMemo(() => {
+    if (!currentUserId || !community?.createdBy) return false;
+    return currentUserId === community.createdBy;
+  }, [currentUserId, community?.createdBy]);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,13 +299,52 @@ const CommunityFeedScreen = () => {
         },
       },
     ]);
-  }, [adminIds.length, communityId, currentUserId, isAdmin, isMember, navigation]);
+  }, [adminIds.length, communityId, currentUserId, isAdmin, isMember, isFounder, navigation]);
+
+  // Pull to refresh handler
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    // The posts listener will update automatically, we just need to show the spinner briefly
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
+
+  // Navigate to post detail
+  const handlePostPress = useCallback((post) => {
+    navigation.navigate('FoodDetail', { postId: post.id, communityId });
+  }, [navigation, communityId]);
+
+  // Navigate to create new post
+  const handleCreatePost = useCallback(() => {
+    navigation.navigate('TodaysMenu', { communityId, communityName: community?.name || communityName });
+  }, [navigation, communityId, community?.name, communityName]);
+
+  // Render kitchen card
+  const renderKitchenCard = useCallback(({ item }) => (
+    <KitchenCard post={item} onPress={handlePostPress} />
+  ), [handlePostPress]);
+
+  // Key extractor for FlatList
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  // Empty state component
+  const renderEmptyState = useCallback(() => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>🍳</Text>
+      <Text style={styles.emptyTitle}>No food posts yet</Text>
+      <Text style={styles.emptySubtitle}>Be the first to share your delicious cooking!</Text>
+      {isMember ? (
+        <TouchableOpacity style={styles.emptyButton} onPress={handleCreatePost}>
+          <Text style={styles.emptyButtonText}>Post Food</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  ), [isMember, handleCreatePost]);
 
   if (loading) {
     return (
       <View style={styles.containerCenter}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.subtitle}>Loading...</Text>
+        <Text style={styles.loadingText}>Loading feed...</Text>
       </View>
     );
   }
@@ -254,44 +352,79 @@ const CommunityFeedScreen = () => {
   if (!community) {
     return (
       <View style={styles.containerCenter}>
-        <Text style={styles.title}>Community Feed</Text>
-        <Text style={styles.subtitle}>Community not found.</Text>
+        <Text style={styles.errorIcon}>😕</Text>
+        <Text style={styles.errorTitle}>Community not found</Text>
+        <Text style={styles.errorSubtitle}>This community may have been deleted.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.retryButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Dropdown Menu */}
       {menuVisible ? (
         <>
           <Pressable style={styles.menuBackdrop} onPress={closeMenu} />
           <View style={styles.dropdownMenu}>
             <TouchableOpacity style={styles.menuItem} onPress={handleMessageAdmin}>
-              <Text style={styles.menuText}>Message admin</Text>
+              <Text style={styles.menuText}>📧 Message admin</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.menuItem, styles.lastMenuItem]}
-              onPress={handleLeaveCommunity}
-              disabled={working}
-            >
-              <Text style={[styles.menuText, styles.dangerText]}>
-                {working ? 'Leaving...' : 'Leave community'}
-              </Text>
-            </TouchableOpacity>
+            {isMember && !isFounder ? (
+              <TouchableOpacity
+                style={[styles.menuItem, styles.lastMenuItem]}
+                onPress={handleLeaveCommunity}
+                disabled={working}
+              >
+                <Text style={[styles.menuText, styles.dangerText]}>
+                  {working ? 'Leaving...' : '🚪 Leave community'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.lastMenuItem} />
+            )}
           </View>
         </>
       ) : null}
 
-      <View style={styles.feedHeader}>
-        <Text style={styles.title}>Community Feed</Text>
-        <Text style={styles.subtitle}>
-          {isMember ? 'You are a member.' : 'You are not a member.'}
-        </Text>
-        <Text style={styles.meta}>communityId: {communityId || 'N/A'}</Text>
-        <Text style={styles.metaMuted}>
-          Feed content coming soon.
-        </Text>
-      </View>
+      {/* Error State */}
+      {postsError ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{postsError}</Text>
+        </View>
+      ) : null}
+
+      {/* Posts FlatList */}
+      <FlatList
+        data={posts}
+        renderItem={renderKitchenCard}
+        keyExtractor={keyExtractor}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={renderEmptyState}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      />
+
+      {/* Floating Action Button */}
+      {isMember ? (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleCreatePost}
+          activeOpacity={0.8}
+          accessibilityLabel="Create new food post"
+        >
+          <Text style={styles.fabIcon}>+</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 };
@@ -300,7 +433,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    padding: 24,
   },
   containerCenter: {
     flex: 1,
@@ -309,29 +441,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginBottom: 8,
+  listContent: {
+    padding: 16,
+    paddingBottom: 100,
   },
-  subtitle: {
+  loadingText: {
     fontSize: 14,
-    color: COLORS.textLight,
-    marginBottom: 12,
-  },
-  meta: {
-    fontSize: 12,
-    color: COLORS.text,
-  },
-  metaMuted: {
-    fontSize: 12,
     color: COLORS.textMuted,
-    marginTop: 6,
-  },
-  feedHeader: {
     marginTop: 12,
   },
+
+  // Header styles
   headerMenuButton: {
     width: 44,
     height: 44,
@@ -344,28 +464,36 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginTop: -6,
   },
+
+  // Dropdown menu
   menuBackdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 5,
   },
   dropdownMenu: {
     position: 'absolute',
     top: 12,
-    right: 12,
-    width: 180,
+    right: 16,
+    width: 200,
     backgroundColor: COLORS.white,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
     zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -373,12 +501,115 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   menuText: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.text,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   dangerText: {
     color: COLORS.error,
+  },
+
+  // Error banner
+  errorBanner: {
+    backgroundColor: '#FFEBEE',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFCDD2',
+  },
+  errorBannerText: {
+    color: COLORS.error,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+
+  // Empty state
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  emptyButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  emptyButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Error state
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabIcon: {
+    fontSize: 28,
+    color: COLORS.white,
+    fontWeight: '300',
+    marginTop: -2,
   },
 });
 

@@ -369,6 +369,11 @@ const MyAccountScreen = () => {
   const handleDateSelect = (selectedDate) => {
     if (selectedDate) {
       setDateOfBirth(selectedDate);
+      // Clear date of birth error when a new date is selected
+      setErrors((prev) => {
+        const { dateOfBirth: _, ...rest } = prev;
+        return rest;
+      });
     }
   };
 
@@ -448,7 +453,14 @@ const MyAccountScreen = () => {
               placeholder="Enter your name"
               placeholderTextColor={COLORS.textMuted}
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => {
+                setName(text);
+                // Clear name error immediately when user types
+                setErrors((prev) => {
+                  const { name: _, ...rest } = prev;
+                  return rest;
+                });
+              }}
               maxLength={50}
             />
             {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
@@ -477,7 +489,14 @@ const MyAccountScreen = () => {
               placeholder="+1 (555) 123-4567"
               placeholderTextColor={COLORS.textMuted}
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(text) => {
+                setPhoneNumber(text);
+                // Clear phone error immediately when user types
+                setErrors((prev) => {
+                  const { phoneNumber: _, ...rest } = prev;
+                  return rest;
+                });
+              }}
               keyboardType="phone-pad"
               maxLength={20}
             />

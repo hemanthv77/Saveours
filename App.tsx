@@ -21,6 +21,7 @@ import CommunityDetailScreen from './src/screens/CommunityDetailScreen';
 import CommunityFeedScreen from './src/screens/CommunityFeedScreen';
 import MyCommunitiesScreen from './src/screens/MyCommunitiesScreen';
 import MyAccountScreen from './src/screens/MyAccountScreen';
+import TodaysMenuScreen from './src/screens/TodaysMenuScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +66,11 @@ function App() {
               name="MyAccount" 
               component={MyAccountScreen}
               options={{ title: 'My Account' }}
+            />
+            <Stack.Screen 
+              name="TodaysMenu" 
+              component={TodaysMenuScreen}
+              options={{ title: "Today's Menu" }}
             />
           </Stack.Navigator>
         </NavigationContainer>

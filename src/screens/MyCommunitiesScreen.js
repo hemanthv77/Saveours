@@ -168,19 +168,25 @@ const MyCommunitiesScreen = () => {
   // ============================================================
   // RENDER FUNCTIONS
   // ============================================================
-  const renderCommunityCard = (community) => (
-    <View key={community.id} style={styles.cardWrapper}>
-      {community.isAdmin && (
-        <View style={styles.adminBadge}>
-          <Text style={styles.adminBadgeText}>Admin</Text>
-        </View>
-      )}
-      <CommunityCard
-        community={community}
-        onPress={() => handleCommunityPress(community)}
-      />
-    </View>
-  );
+  const renderCommunityCard = (community) => {
+    const isFounder = community.createdBy === currentUser?.uid;
+    
+    return (
+      <View key={community.id} style={styles.cardWrapper}>
+        {community.isAdmin && (
+          <View style={[styles.adminBadge, isFounder && styles.founderBadge]}>
+            <Text style={styles.adminBadgeText}>
+              {isFounder ? '👑 Founder' : 'Admin'}
+            </Text>
+          </View>
+        )}
+        <CommunityCard
+          community={community}
+          onPress={() => handleCommunityPress(community)}
+        />
+      </View>
+    );
+  };
 
   const renderAdminEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -341,6 +347,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  founderBadge: {
+    backgroundColor: '#FFA000',
   },
   // Empty States
   emptyContainer: {
