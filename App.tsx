@@ -29,6 +29,9 @@ import CartScreen from './src/screens/CartScreen';
 import CheckoutScreen from './src/screens/CheckoutScreen';
 import OrderConfirmationScreen from './src/screens/OrderConfirmationScreen';
 import MyOrdersScreen from './src/screens/MyOrdersScreen';
+import BuyerOrdersScreen from './src/screens/BuyerOrdersScreen';
+import OrderDetailScreen from './src/screens/OrderDetailScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 
 const Stack = createNativeStackNavigator();
@@ -99,7 +102,22 @@ function App() {
             <Stack.Screen 
               name="MyOrders" 
               component={MyOrdersScreen}
-              options={{ title: "My Orders" }}
+              options={{ title: "Received Orders" }}
+            />
+            <Stack.Screen 
+              name="BuyerOrders" 
+              component={BuyerOrdersScreen}
+              options={{ title: "Placed Orders" }}
+            />
+            <Stack.Screen 
+              name="OrderDetail" 
+              component={OrderDetailScreen}
+              options={{ title: "Order Details" }}
+            />
+            <Stack.Screen 
+              name="Chat" 
+              component={ChatScreen}
+              options={{ title: "Chat" }}
             />
             <Stack.Screen 
               name="Notifications" 

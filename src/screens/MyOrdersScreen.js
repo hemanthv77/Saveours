@@ -226,6 +226,17 @@ const MyOrdersScreen = () => {
     }
   }, [dispatch, currentUser]);
 
+  // Handle message buyer
+  const handleMessageBuyer = useCallback((order) => {
+    navigation.navigate('Chat', {
+      buyerId: order.buyerId,
+      buyerName: order.buyerName,
+      orderId: order.id,
+      sellerId: currentUser?.uid,
+      sellerName: currentUser?.displayName || currentUser?.name || 'Seller',
+    });
+  }, [navigation, currentUser]);
+
   // Render order card
   const renderOrderCard = useCallback(({ item }) => (
     <OrderCard
@@ -233,9 +244,10 @@ const MyOrdersScreen = () => {
       isActive={activeTab === 'active'}
       onStatusUpdate={handleStatusUpdate}
       onCancelOrder={handleCancelOrder}
+      onMessageBuyer={handleMessageBuyer}
       onPress={handleOrderPress}
     />
-  ), [activeTab, handleStatusUpdate, handleCancelOrder, handleOrderPress]);
+  ), [activeTab, handleStatusUpdate, handleCancelOrder, handleMessageBuyer, handleOrderPress]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => (

@@ -14,6 +14,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendNotificationToUser, NotificationTemplates } from '../services/notificationSender';
 
 // Redux
 import {
@@ -305,6 +306,15 @@ const CheckoutScreen = () => {
       };
 
       await firestore().collection('notifications').add(notificationData);
+
+      // 4b. Send push notification to seller
+      const pushNotification = NotificationTemplates.newOrder(
+        cartSellerName,
+        contactName.trim(),
+        grandTotal,
+        orderId
+      );
+      await sendNotificationToUser(cartSellerId, pushNotification);
 
       // 5. Clear cart from Redux and AsyncStorage
       dispatch(clearCart());

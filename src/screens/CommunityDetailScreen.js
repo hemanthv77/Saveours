@@ -18,6 +18,7 @@ import auth from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 import JoinRequestModal from '../components/JoinRequestModal';
+import { sendNotificationToUser, NotificationTemplates } from '../services/notificationSender';
 
 const COLORS = {
   primary: '#FF6B4A',
@@ -736,6 +737,13 @@ const CommunityDetailScreen = () => {
             respondedBy: currentUserId,
           });
         });
+
+        // Send push notification to approved user
+        const pushNotification = NotificationTemplates.joinRequestApproved(
+          community?.name || 'the community',
+          communityId
+        );
+        await sendNotificationToUser(request.userId, pushNotification);
 
         Alert.alert('Approved', `${request.userName || 'User'} has been added to the community.`);
       } else {

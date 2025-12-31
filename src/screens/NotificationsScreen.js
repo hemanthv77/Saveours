@@ -229,11 +229,9 @@ const NotificationsScreen = () => {
       case 'order_ready':
       case 'order_completed':
       case 'order_cancelled':
-        // Navigate to order tracking or chat
+        // Navigate to order detail screen
         if (notification.data?.orderId) {
-          // Could navigate to order tracking screen
-          navigation.navigate('Chat', {
-            channelId: notification.data?.chatChannelId,
+          navigation.navigate('OrderDetail', {
             orderId: notification.data?.orderId,
           });
         }

@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import firestore from '@react-native-firebase/firestore';
+import { sendNotificationToUser, NotificationTemplates } from '../services/notificationSender';
 
 // ============================================================
 // ASYNC THUNKS
@@ -134,6 +135,14 @@ export const updateOrderStatus = createAsyncThunk(
           read: false,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
+
+        // Send push notification to buyer
+        const pushNotification = NotificationTemplates.orderStatusUpdate(
+          status,
+          sellerName,
+          orderId
+        );
+        await sendNotificationToUser(buyerId, pushNotification);
       }
 
       return { orderId, status };

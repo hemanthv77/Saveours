@@ -74,6 +74,10 @@ const CommunitiesScreen = () => {
   const [creating, setCreating] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+  const [receivedOrdersCount, setReceivedOrdersCount] = useState(0);
+  const [unreadOrderUpdatesCount, setUnreadOrderUpdatesCount] = useState(0);
+  const [unreadOrderUpdatesCount, setUnreadOrderUpdatesCount] = useState(0);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -184,6 +188,86 @@ const CommunitiesScreen = () => {
   const closeMenu = () => {
     setMenuVisible(false);
   };
+
+  // Real-time listener for active orders count (as buyer)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = firestore()
+      .collection('orders')
+      .where('buyerId', '==', user.uid)
+      .where('orderStatus', 'in', ['pending', 'confirmed', 'preparing', 'ready'])
+      .onSnapshot(
+        (snapshot) => {
+          setActiveOrdersCount(snapshot.size);
+        },
+        (error) => {
+          console.error('Active orders listener error:', error);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // Real-time listener for received orders count (as seller)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = firestore()
+      .collection('orders')
+      .where('sellerId', '==', user.uid)
+      .where('orderStatus', 'in', ['pending', 'confirmed', 'preparing', 'ready'])
+      .onSnapshot(
+        (snapshot) => {
+          setReceivedOrdersCount(snapshot.size);
+        },
+        (error) => {
+          console.error('Received orders listener error:', error);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // Real-time listener for unread order updates (as buyer)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = firestore()
+      .collection('orders')
+      .where('buyerId', '==', user.uid)
+      .where('hasUnreadUpdate', '==', true)
+      .onSnapshot(
+        (snapshot) => {
+          setUnreadOrderUpdatesCount(snapshot.size);
+        },
+        (error) => {
+          console.error('Unread order updates listener error:', error);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // Real-time listener for unread order updates (as buyer)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = firestore()
+      .collection('orders')
+      .where('buyerId', '==', user.uid)
+      .where('hasUnreadUpdate', '==', true)
+      .onSnapshot(
+        (snapshot) => {
+          setUnreadOrderUpdatesCount(snapshot.size);
+        },
+        (error) => {
+          console.error('Unread order updates listener error:', error);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Sign out handler
   const handleSignOut = () => {
@@ -584,6 +668,48 @@ const CommunitiesScreen = () => {
             >
               <Text style={styles.menuIcon}>🏠</Text>
               <Text style={styles.menuText}>My Communities</Text>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
+            {/* Placed Orders (Buyer) */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                closeMenu();
+                navigation.navigate('BuyerOrders');
+              }}
+              accessibilityLabel="Placed Orders"
+            >
+              <Text style={styles.menuIcon}>📦</Text>
+              <Text style={styles.menuText}>Placed Orders</Text>
+              {unreadOrderUpdatesCount > 0 ? (
+                <View style={[styles.menuBadge, styles.menuBadgeAlert]}>
+                  <Text style={styles.menuBadgeText}>{unreadOrderUpdatesCount > 99 ? '99+' : unreadOrderUpdatesCount}</Text>
+                </View>
+              ) : activeOrdersCount > 0 ? (
+                <View style={styles.menuBadge}>
+                  <Text style={styles.menuBadgeText}>{activeOrdersCount}</Text>
+                </View>
+              ) : null}
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
+            {/* Received Orders (Seller) */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                closeMenu();
+                navigation.navigate('MyOrders');
+              }}
+              accessibilityLabel="Received Orders"
+            >
+              <Text style={styles.menuIcon}>📝</Text>
+              <Text style={styles.menuText}>Received Orders</Text>
+              {receivedOrdersCount > 0 && (
+                <View style={styles.menuBadge}>
+                  <Text style={styles.menuBadgeText}>{receivedOrdersCount}</Text>
+                </View>
+              )}
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
 
@@ -1095,6 +1221,24 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: COLORS.textLight,
     fontWeight: '300',
+  },
+  menuBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginRight: 8,
+  },
+  menuBadgeAlert: {
+    backgroundColor: COLORS.error,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.white,
   },
   // Search
   searchContainer: {

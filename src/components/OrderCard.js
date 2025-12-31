@@ -103,6 +103,7 @@ const OrderCard = memo(({
   isActive = true,
   onStatusUpdate,
   onCancelOrder,
+  onMessageBuyer,
   onPress,
 }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -284,6 +285,18 @@ const OrderCard = memo(({
               activeOpacity={0.8}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+          
+          {/* Message Buyer Button */}
+          {onMessageBuyer && (
+            <TouchableOpacity
+              style={styles.messageButton}
+              onPress={() => onMessageBuyer(order)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.messageButtonIcon}>💬</Text>
+              <Text style={styles.messageButtonText}>Message</Text>
             </TouchableOpacity>
           )}
           
@@ -594,6 +607,33 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 2,
     borderColor: COLORS.error,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
+
+  // Message Button
+  messageButton: {
+    backgroundColor: COLORS.white,
+    height: 48,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    gap: 6,
+  },
+  messageButtonIcon: {
+    fontSize: 14,
+  },
+  messageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   cancelButtonText: {
     fontSize: 16,
