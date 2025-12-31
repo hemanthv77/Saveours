@@ -2,19 +2,35 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Linking,
   Pressable,
   RefreshControl,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSelector, useDispatch } from 'react-redux';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import KitchenCard from '../components/KitchenCard';
+import {
+  selectCartItemCount,
+  selectCartTotal,
+  selectIsCartEmpty,
+  selectCartExpiresAt,
+  checkCartExpiry,
+} from '../redux/cartSlice';
+import {
+  selectOrderNotifications,
+} from '../redux/notificationsSlice';
+import {
+  fetchSellerOrders,
+  setOrderCounts,
+  selectActiveOrders,
+} from '../redux/creatorOrdersSlice';
 
 const COLORS = {
   primary: '#FF6B4A',
@@ -30,12 +46,115 @@ const COLORS = {
   success: '#34C759',
 };
 
+// Helper to format date for section headers
+const formatDateHeader = (date) => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const targetDate = new Date(date);
+  
+  // Reset times to compare just dates
+  const isToday = targetDate.toDateString() === today.toDateString();
+  const isYesterday = targetDate.toDateString() === yesterday.toDateString();
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  const dayName = dayNames[targetDate.getDay()];
+  const monthName = monthNames[targetDate.getMonth()];
+  const dayNum = targetDate.getDate();
+  const year = targetDate.getFullYear();
+
+  if (isToday) {
+    return `Today • ${dayName}, ${monthName} ${dayNum}`;
+  }
+  if (isYesterday) {
+    return `Yesterday • ${dayName}, ${monthName} ${dayNum}`;
+  }
+  return `${dayName}, ${monthName} ${dayNum}, ${year}`;
+};
+
+// Helper to get date key for grouping (YYYY-MM-DD)
+const getDateKey = (timestamp) => {
+  if (!timestamp) return 'unknown';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return date.toISOString().split('T')[0];
+};
+
+// Group posts by date
+const groupPostsByDate = (posts) => {
+  const grouped = {};
+  
+  posts.forEach((post) => {
+    const dateKey = getDateKey(post.createdAt);
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = {
+        title: dateKey,
+        data: [],
+      };
+    }
+    grouped[dateKey].data.push(post);
+  });
+
+  // Convert to array and sort by date descending
+  return Object.values(grouped)
+    .sort((a, b) => b.title.localeCompare(a.title))
+    .map((section) => ({
+      ...section,
+      title: formatDateHeader(section.title),
+    }));
+};
+
 const CommunityFeedScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const dispatch = useDispatch();
   const { communityId, communityName } = route.params || {};
 
   const currentUserId = auth().currentUser?.uid || null;
+
+  // Cart state from Redux
+  const cartItemCount = useSelector(selectCartItemCount);
+  const cartTotal = useSelector(selectCartTotal);
+  const isCartEmpty = useSelector(selectIsCartEmpty);
+  const cartExpiresAt = useSelector(selectCartExpiresAt);
+
+  // Notification state from Redux
+  const orderNotifications = useSelector(selectOrderNotifications);
+  const activeOrders = useSelector(selectActiveOrders);
+
+  // Find latest unread order notification for this community
+  const latestOrderNotification = useMemo(() => {
+    const communityNotifications = orderNotifications.filter(
+      (n) => n.data?.communityId === communityId && !n.read
+    );
+    return communityNotifications[0] || null;
+  }, [orderNotifications, communityId]);
+
+  // Fetch seller orders on mount to get order counts
+  useEffect(() => {
+    if (currentUserId) {
+      dispatch(fetchSellerOrders(currentUserId));
+    }
+  }, [currentUserId, dispatch]);
+
+  // Calculate order counts per post from active orders
+  useEffect(() => {
+    if (activeOrders && activeOrders.length > 0) {
+      const counts = {};
+      activeOrders.forEach((order) => {
+        if (order.postId) {
+          counts[order.postId] = (counts[order.postId] || 0) + 1;
+        }
+      });
+      dispatch(setOrderCounts(counts));
+    }
+  }, [activeOrders, dispatch]);
+
+  // Cart timer state
+  const [cartTimeRemaining, setCartTimeRemaining] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,6 +164,42 @@ const CommunityFeedScreen = () => {
   const [adminUsers, setAdminUsers] = useState([]);
   const [posts, setPosts] = useState([]);
   const [postsError, setPostsError] = useState(null);
+
+  // Cart expiry timer
+  useEffect(() => {
+    if (!cartExpiresAt) {
+      setCartTimeRemaining(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const remaining = cartExpiresAt - Date.now();
+      if (remaining <= 0) {
+        dispatch(checkCartExpiry());
+        setCartTimeRemaining(null);
+      } else {
+        setCartTimeRemaining(remaining);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [cartExpiresAt, dispatch]);
+
+  // Format cart timer
+  const formatCartTime = useCallback((ms) => {
+    if (!ms || ms <= 0) return '0:00';
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Navigate to cart
+  const handleGoToCart = useCallback(() => {
+    navigation.navigate('Cart');
+  }, [navigation]);
 
   // Header setup with profile menu
   useLayoutEffect(() => {
@@ -61,16 +216,32 @@ const CommunityFeedScreen = () => {
         color: COLORS.text,
       },
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => setMenuVisible((v) => !v)}
-          style={styles.headerMenuButton}
-          accessibilityLabel="Community menu"
-        >
-          <Text style={styles.headerMenuIcon}>⋯</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightContainer}>
+          {/* Cart icon with badge */}
+          {!isCartEmpty && (
+            <TouchableOpacity
+              onPress={handleGoToCart}
+              style={styles.headerCartButton}
+              accessibilityLabel="Go to cart"
+            >
+              <Text style={styles.headerCartIcon}>🛒</Text>
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          {/* Menu button */}
+          <TouchableOpacity
+            onPress={() => setMenuVisible((v) => !v)}
+            style={styles.headerMenuButton}
+            accessibilityLabel="Community menu"
+          >
+            <Text style={styles.headerMenuIcon}>⋯</Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation, communityName]);
+  }, [navigation, communityName, isCartEmpty, cartItemCount, handleGoToCart]);
 
   // Listen for community data
   useEffect(() => {
@@ -142,6 +313,39 @@ const CommunityFeedScreen = () => {
     return unsubscribe;
   }, [communityId]);
 
+  // Real-time listener for orders on user's posts in this community
+  useEffect(() => {
+    if (!currentUserId || !posts.length) return;
+
+    // Get post IDs that belong to the current user
+    const userPostIds = posts
+      .filter((p) => p.userId === currentUserId)
+      .map((p) => p.id);
+
+    if (userPostIds.length === 0) return;
+
+    // Listen for active orders on user's posts
+    const unsubscribe = firestore()
+      .collection('orders')
+      .where('postId', 'in', userPostIds.slice(0, 10)) // Firestore 'in' limit is 10
+      .where('orderStatus', 'in', ['pending', 'confirmed', 'preparing', 'ready'])
+      .onSnapshot(
+        (snapshot) => {
+          const counts = {};
+          snapshot.docs.forEach((doc) => {
+            const postId = doc.data().postId;
+            counts[postId] = (counts[postId] || 0) + 1;
+          });
+          dispatch(setOrderCounts(counts));
+        },
+        (error) => {
+          console.error('Orders listener error:', error);
+        }
+      );
+
+    return unsubscribe;
+  }, [currentUserId, posts, dispatch]);
+
   const adminIds = useMemo(() => {
     const ids = Array.isArray(community?.adminIds) ? community.adminIds : [];
     const creatorId = typeof community?.createdBy === 'string' ? community.createdBy : null;
@@ -168,6 +372,11 @@ const CommunityFeedScreen = () => {
     if (!currentUserId || !community?.createdBy) return false;
     return currentUserId === community.createdBy;
   }, [currentUserId, community?.createdBy]);
+
+  // Group posts by date for SectionList
+  const sections = useMemo(() => {
+    return groupPostsByDate(posts);
+  }, [posts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -323,7 +532,14 @@ const CommunityFeedScreen = () => {
     <KitchenCard post={item} onPress={handlePostPress} />
   ), [handlePostPress]);
 
-  // Key extractor for FlatList
+  // Render section header (date)
+  const renderSectionHeader = useCallback(({ section: { title } }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{title}</Text>
+    </View>
+  ), []);
+
+  // Key extractor for SectionList
   const keyExtractor = useCallback((item) => item.id, []);
 
   // Empty state component
@@ -396,14 +612,39 @@ const CommunityFeedScreen = () => {
         </View>
       ) : null}
 
-      {/* Posts FlatList */}
-      <FlatList
-        data={posts}
+      {/* Order Notification Banner for Creators */}
+      {latestOrderNotification && (
+        <TouchableOpacity
+          style={styles.orderNotificationBanner}
+          onPress={() => navigation.navigate('MyOrders', { 
+            postId: latestOrderNotification.data?.postId,
+            postTitle: latestOrderNotification.data?.postTitle,
+          })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.notificationBannerContent}>
+            <Text style={styles.notificationBannerIcon}>🛒</Text>
+            <View style={styles.notificationBannerText}>
+              <Text style={styles.notificationBannerTitle}>New Order Received!</Text>
+              <Text style={styles.notificationBannerSubtitle} numberOfLines={1}>
+                {latestOrderNotification.body || 'Tap to view order details'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.notificationBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Posts SectionList grouped by date */}
+      <SectionList
+        sections={sections}
         renderItem={renderKitchenCard}
+        renderSectionHeader={renderSectionHeader}
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={renderEmptyState}
+        stickySectionHeadersEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -417,7 +658,7 @@ const CommunityFeedScreen = () => {
       {/* Floating Action Button */}
       {isMember ? (
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, !isCartEmpty && styles.fabWithCart]}
           onPress={handleCreatePost}
           activeOpacity={0.8}
           accessibilityLabel="Create new food post"
@@ -425,6 +666,37 @@ const CommunityFeedScreen = () => {
           <Text style={styles.fabIcon}>+</Text>
         </TouchableOpacity>
       ) : null}
+
+      {/* Bottom Cart Bar */}
+      {!isCartEmpty && (
+        <View style={styles.bottomCartBar}>
+          <View style={styles.cartInfoSection}>
+            <Text style={styles.cartInfoIcon}>🛒</Text>
+            <View style={styles.cartInfoDetails}>
+              <Text style={styles.cartInfoCount}>
+                {cartItemCount} {cartItemCount === 1 ? 'item' : 'items'}
+              </Text>
+              <Text style={styles.cartInfoTotal}>₹{cartTotal.toFixed(2)}</Text>
+            </View>
+            {cartTimeRemaining && (
+              <View style={styles.cartTimerContainer}>
+                <Text style={styles.cartTimerIcon}>⏱️</Text>
+                <Text style={styles.cartTimerText}>
+                  {formatCartTime(cartTimeRemaining)}
+                </Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.goToCartButton}
+            onPress={handleGoToCart}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.goToCartText}>Go to Cart</Text>
+            <Text style={styles.goToCartArrow}>→</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -445,6 +717,21 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
   },
+
+  // Section header (date)
+  sectionHeader: {
+    backgroundColor: COLORS.background,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textLight,
+    letterSpacing: 0.3,
+  },
+
   loadingText: {
     fontSize: 14,
     color: COLORS.textMuted,
@@ -463,6 +750,33 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: COLORS.text,
     marginTop: -6,
+  },
+  headerNotificationButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  headerNotificationIcon: {
+    fontSize: 22,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.white,
   },
 
   // Dropdown menu
@@ -521,6 +835,49 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: 13,
     textAlign: 'center',
+  },
+
+  // Order notification banner
+  orderNotificationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  notificationBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  notificationBannerIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  notificationBannerText: {
+    flex: 1,
+  },
+  notificationBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+    marginBottom: 2,
+  },
+  notificationBannerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  notificationBannerArrow: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.white,
+    marginLeft: 8,
   },
 
   // Empty state
@@ -605,11 +962,130 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  fabWithCart: {
+    bottom: 90, // Move up when cart bar is visible
+  },
   fabIcon: {
     fontSize: 28,
     color: COLORS.white,
     fontWeight: '300',
     marginTop: -2,
+  },
+
+  // Header right container
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerCartButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  headerCartIcon: {
+    fontSize: 22,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  cartBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+
+  // Bottom cart bar
+  bottomCartBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  cartInfoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cartInfoIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  cartInfoDetails: {
+    flexDirection: 'column',
+  },
+  cartInfoCount: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  cartInfoTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  cartTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 16,
+    backgroundColor: COLORS.background,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  cartTimerIcon: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  cartTimerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
+  goToCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  goToCartText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  goToCartArrow: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.white,
   },
 });
 

@@ -11,24 +11,58 @@ import {
   Platform,
   ImageBackground,
 } from 'react-native';
-import { signIn } from '../services/firebase';
+import { useDispatch } from 'react-redux';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { setUser } from '../redux/authSlice';
 
 const loginBackgroundImage = require('../../assets/login-bg.png');
 
 const LoginScreen = ({ navigation }) => {
+  const dispatch = useDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await signIn(email, password);
+      // Sign in with Firebase Auth
+      const userCredential = await auth().signInWithEmailAndPassword(email, password);
+      const user = userCredential.user;
+
+      // Fetch user profile from Firestore
+      const userDoc = await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+      const userData = userDoc.exists ? userDoc.data() : {};
+
+      // Update Redux store with user data
+      dispatch(setUser({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        ...userData,
+        dateOfBirth: userData.dateOfBirth?.toMillis?.() || userData.dateOfBirth || null,
+      }));
+
       Alert.alert('Success', 'Logged in successfully!');
       navigation.reset({
         index: 0,
         routes: [{ name: 'Communities' }],
       });
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Login error:', error);
+      Alert.alert('Error', error.message || 'Failed to login');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -74,8 +108,14 @@ const LoginScreen = ({ navigation }) => {
               autoComplete="password"
             />
 
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText}>Login</Text>
+            <TouchableOpacity 
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              <Text style={styles.loginButtonText}>
+                {loading ? 'Logging in...' : 'Login'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -150,6 +190,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8,
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#CCCCCC',
   },
   loginButtonText: {
     color: '#FFFFFF',

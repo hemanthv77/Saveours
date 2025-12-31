@@ -1,6 +1,6 @@
 {
   "name": "Saveours",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -10,6 +10,8 @@
     "test": "jest"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^1.24.0",
+    "@react-native-clipboard/clipboard": "^1.16.3",
     "@react-native-community/datetimepicker": "^8.5.1",
     "@react-native-community/slider": "^5.1.1",
     "@react-native-firebase/app": "^23.7.0",

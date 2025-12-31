@@ -38,6 +38,7 @@ import {
   setLoading,
   setError,
 } from '../redux/communitiesSlice';
+import { selectUnreadCount } from '../redux/notificationsSlice';
 
 // ============================================================
 // CONSTANTS
@@ -64,6 +65,7 @@ const CommunitiesScreen = () => {
   // Redux state
   const { communities, loading } = useSelector((state) => state.communities);
   const user = useSelector((state) => state.auth.user);
+  const unreadNotificationCount = useSelector(selectUnreadCount);
 
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
@@ -528,18 +530,36 @@ const CommunitiesScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Saveours</Text>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={toggleMenu}
-          accessibilityLabel="Profile menu"
-          accessibilityHint="Open profile menu"
-        >
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {user?.email?.charAt(0).toUpperCase() || '👤'}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {/* Notifications icon */}
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => navigation.navigate('Notifications')}
+            accessibilityLabel="Notifications"
+          >
+            <Text style={styles.notificationIcon}>🔔</Text>
+            {unreadNotificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Profile button */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={toggleMenu}
+            accessibilityLabel="Profile menu"
+            accessibilityHint="Open profile menu"
+          >
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>
+                {user?.email?.charAt(0).toUpperCase() || '👤'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Profile Dropdown Menu */}
@@ -964,6 +984,37 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.primary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  notificationIcon: {
+    fontSize: 22,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.white,
   },
   profileButton: {
     width: 44,

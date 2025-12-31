@@ -8,6 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import auth from '@react-native-firebase/auth';
+import { useSelector } from 'react-redux';
+import { selectOrderCounts } from '../redux/creatorOrdersSlice';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 16;
@@ -22,8 +26,10 @@ const COLORS = {
   textLight: '#666666',
   textMuted: '#888888',
   border: '#E0E0E0',
+  borderLight: '#EEEEEE',
   soldOut: '#FF3B30',
   lowStock: '#FF9500',
+  disabled: '#CCCCCC',
 };
 
 // Helper to format relative time
@@ -65,9 +71,20 @@ const getInitials = (name) => {
  *   - createdAt: timestamp
  *   - status: 'active' | 'expired' | 'sold_out' | 'manually_closed'
  * @param {Function} props.onPress - Callback when card is pressed, receives post object
+ * @param {Function} props.onBuyPress - Optional custom handler for buy button
  */
-const KitchenCard = memo(({ post, onPress }) => {
+const KitchenCard = memo(({ post, onPress, onBuyPress }) => {
+  const navigation = useNavigation();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Check if current user is the post creator
+  const currentUserId = auth().currentUser?.uid;
+  const isOwnPost = currentUserId && post?.userId === currentUserId;
+  
+  // Get order counts for this post from Redux
+  const orderCounts = useSelector(selectOrderCounts);
+  const postId = post?.postId || post?.id;
+  const postOrderCount = orderCounts[postId] || 0;
 
   // Collect all photos from all dishes with dish name association
   const allPhotos = useMemo(() => {
@@ -99,6 +116,74 @@ const KitchenCard = memo(({ post, onPress }) => {
 
   const displayName = post?.userName || 'Anonymous';
   const timeAgo = formatTimeAgo(post?.createdAt);
+
+  // Determine if all dishes are sold out
+  const isAllSoldOut = useMemo(() => {
+    if (!post?.dishes || post.dishes.length === 0) return true;
+    return post.dishes.every((dish) => {
+      const available = (dish.portionsAvailable || 0) - (dish.portionsReserved || 0) - (dish.portionsSold || 0);
+      return available <= 0;
+    });
+  }, [post?.dishes]);
+
+  // Check if post is expired or closed
+  const isExpiredOrClosed = useMemo(() => {
+    if (!post) return true;
+    if (post.status === 'expired' || post.status === 'manually_closed') return true;
+    if (post.expiresAt) {
+      const expiryDate = post.expiresAt.toDate ? post.expiresAt.toDate() : new Date(post.expiresAt);
+      return new Date() > expiryDate;
+    }
+    return false;
+  }, [post]);
+
+  // Determine button state
+  const buttonState = useMemo(() => {
+    if (isOwnPost) {
+      // Show "View Orders (X)" if there are orders, otherwise "Your Post"
+      if (postOrderCount > 0) {
+        return { 
+          disabled: false, 
+          text: `View Orders (${postOrderCount})`, 
+          isOwn: true,
+          hasOrders: true 
+        };
+      }
+      return { disabled: true, text: 'Your Post', isOwn: true, hasOrders: false };
+    }
+    if (isExpiredOrClosed) {
+      return { disabled: true, text: 'No Longer Available' };
+    }
+    if (isAllSoldOut || post?.status === 'sold_out') {
+      return { disabled: true, text: 'Sold Out' };
+    }
+    return { disabled: false, text: 'View & Order' };
+  }, [isOwnPost, isExpiredOrClosed, isAllSoldOut, post?.status, postOrderCount]);
+
+  // Handle buy button press
+  const handleBuyPress = useCallback(() => {
+    // If it's creator's own post with orders, navigate to MyOrders
+    if (buttonState.isOwn && buttonState.hasOrders) {
+      navigation.navigate('MyOrders', {
+        postId: post.postId || post.id,
+        postTitle: post.dishes?.[0]?.name || 'Your Post',
+      });
+      return;
+    }
+    
+    if (buttonState.disabled) return;
+    
+    if (onBuyPress) {
+      onBuyPress(post);
+    } else {
+      navigation.navigate('Cart', {
+        postId: post.postId || post.id,
+        sellerId: post.userId,
+        sellerName: post.userName,
+        dishes: post.dishes,
+      });
+    }
+  }, [buttonState, onBuyPress, post, navigation]);
 
   if (!post) return null;
 
@@ -225,6 +310,34 @@ const KitchenCard = memo(({ post, onPress }) => {
             </View>
           );
         })}
+      </View>
+
+      {/* Card Footer with Buy Button */}
+      <View style={styles.cardFooter}>
+        <TouchableOpacity
+          style={[
+            styles.buyButton,
+            buttonState.disabled && styles.buyButtonDisabled,
+            buttonState.isOwn && !buttonState.hasOrders && styles.buyButtonOwn,
+            buttonState.hasOrders && styles.buyButtonViewOrders,
+          ]}
+          onPress={handleBuyPress}
+          disabled={buttonState.disabled && !buttonState.hasOrders}
+          activeOpacity={0.8}
+          accessibilityLabel={buttonState.text}
+          accessibilityRole="button"
+        >
+          <Text
+            style={[
+              styles.buyButtonText,
+              buttonState.disabled && styles.buyButtonTextDisabled,
+              buttonState.isOwn && !buttonState.hasOrders && styles.buyButtonTextOwn,
+              buttonState.hasOrders && styles.buyButtonTextViewOrders,
+            ]}
+          >
+            {buttonState.text}
+          </Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -405,6 +518,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.soldOut,
+  },
+
+  // Card Footer
+  cardFooter: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  buyButton: {
+    backgroundColor: COLORS.primary,
+    height: 44,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buyButtonDisabled: {
+    backgroundColor: COLORS.disabled,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  buyButtonOwn: {
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  buyButtonViewOrders: {
+    backgroundColor: '#2196F3',
+    borderWidth: 0,
+    shadowColor: '#2196F3',
+    shadowOpacity: 0.3,
+    elevation: 3,
+  },
+  buyButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buyButtonTextDisabled: {
+    color: COLORS.white,
+  },
+  buyButtonTextOwn: {
+    color: COLORS.primary,
+  },
+  buyButtonTextViewOrders: {
+    color: COLORS.white,
   },
 });
 
